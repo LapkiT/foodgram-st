@@ -32,9 +32,7 @@ from .serializers import (
     IngredientSerializer,
     RecipeReadSerializer,
     RecipeWriteSerializer,
-    SubscriptionSerializer,
-    SubscriptionCreateDeleteSerializer,
-    UserRecipeRelationSerializer
+    AuthorWithRecipesSerializer,
 )
 from .permissions import IsAuthorOrReadOnly
 from .filters import RecipeFilter, IngredientNameSearchFilter
@@ -55,18 +53,6 @@ class UserViewSet(DjoserUserViewSet):
     queryset = User.objects.all()
     permission_classes = [CurrentUserOrAdminOrReadOnly]
 
-    def get_permissions(self):
-        """
-        Возвращает AllowAny для create (регистрация),
-        IsAuthenticatedOrReadOnly для list/retrieve,
-        для остальных действий — стандартная логика Djoser/DRF.
-        """
-        if self.action == 'create':
-            return [permissions.AllowAny()]
-        if self.action in ['list', 'retrieve']:
-            return [permissions.IsAuthenticatedOrReadOnly()]
-        return super().get_permissions()
-
     @action(
         methods=['put', 'delete'],
         detail=False,
@@ -75,34 +61,17 @@ class UserViewSet(DjoserUserViewSet):
         parser_classes=[JSONParser]
     )
     def avatar(self, request, *args, **kwargs):
-        """
-        PUT - загрузка аватара через Base64.
-        DELETE - удаление аватара.
-        """
-
         user = request.user
-
         if request.method == 'PUT':
-            serializer = AvatarSerializer(
-                user, data=request.data
-            )
+            serializer = AvatarSerializer(user, data=request.data)
             serializer.is_valid(raise_exception=True)
-
             serializer.save()
-
-            response_serializer = AvatarSerializer(
-                user, context={'request': request}
-            )
-            return Response(
-                response_serializer.data, status=status.HTTP_200_OK
-            )
-
-        elif request.method == 'DELETE':
+            response_serializer = AvatarSerializer(user, context={'request': request})
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+        if request.method == 'DELETE':
             if user.avatar:
                 user.avatar.delete(save=True)
-
             return Response(status=status.HTTP_204_NO_CONTENT)
-
         return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
     @action(
@@ -112,43 +81,22 @@ class UserViewSet(DjoserUserViewSet):
         permission_classes=[permissions.IsAuthenticated]
     )
     def subscribe(self, request, id=None):
-        """
-        Подписывает или отписывает текущего пользователя
-        от пользователя по id.
-        """
-
         request_author = get_object_or_404(User, id=id)
         current_user = request.user
-
-        serializer_kwargs = {
-            'data': {'author': request_author.pk},
-            'context': {'request': request}
-        }
-
         if request.method == 'POST':
-
-            post_serializer = SubscriptionCreateDeleteSerializer(
-                **serializer_kwargs
-            )
-            post_serializer.is_valid(raise_exception=True)
-            post_serializer.save()
-
-            response_serializer = SubscriptionSerializer(
-                request_author, context={'request': request}
-            )
-            return Response(response_serializer.data,
-                            status=status.HTTP_201_CREATED)
-
-        elif request.method == 'DELETE':
-
-            subscription_instance = get_object_or_404(
-                Subscription, user=current_user,
-                author=request_author
-            )
+            if current_user == request_author:
+                return Response({'errors': 'Вы не можете подписываться на самого себя.'}, status=status.HTTP_400_BAD_REQUEST)
+            if Subscription.objects.filter(user=current_user, author=request_author).exists():
+                return Response({'errors': 'Вы уже подписаны на этого пользователя.'}, status=status.HTTP_400_BAD_REQUEST)
+            Subscription.objects.create(user=current_user, author=request_author)
+            response_serializer = AuthorWithRecipesSerializer(request_author, context={'request': request})
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        if request.method == 'DELETE':
+            subscription_instance = Subscription.objects.filter(user=current_user, author=request_author).first()
+            if not subscription_instance:
+                return Response({'errors': 'Вы не были подписаны на этого пользователя'}, status=status.HTTP_400_BAD_REQUEST)
             subscription_instance.delete()
-
             return Response(status=status.HTTP_204_NO_CONTENT)
-
         return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
     @action(
@@ -159,19 +107,11 @@ class UserViewSet(DjoserUserViewSet):
     )
     def subscriptions(self, request):
         user = request.user
-        queryset = User.objects.filter(
-            follower__user=user
-        ).prefetch_related('recipes')
+        queryset = User.objects.filter(subscribers__user=user).prefetch_related('recipes')
         page = self.paginate_queryset(queryset)
+        serializer = AuthorWithRecipesSerializer(page if page is not None else queryset, many=True, context={'request': request})
         if page is not None:
-            serializer = SubscriptionSerializer(
-                page, many=True, context={'request': request}
-            )
             return self.get_paginated_response(serializer.data)
-
-        serializer = SubscriptionSerializer(
-            queryset, many=True, context={'request': request}
-        )
         return Response(serializer.data)
 
 
@@ -223,37 +163,24 @@ class RecipeViewSet(viewsets.ModelViewSet):
                                                  ShoppingCart)
 
     def _manage_user_recipe_relation(self, request, pk, model):
-        serializer = UserRecipeRelationSerializer(
-            data={},
-            context={
-                'request': request,
-                'view': self,
-                'model_class': model
-            }
-        )
-        serializer.is_valid(raise_exception=True)
-
-        user = serializer.validated_data['user']
-        recipe = serializer.validated_data['recipe']
-
+        user = request.user
+        try:
+            recipe = Recipe.objects.get(pk=pk)
+        except Recipe.DoesNotExist:
+            return Response({'errors': 'Рецепт с таким ID не найден.'}, status=status.HTTP_404_NOT_FOUND)
+        relation_exists = model.objects.filter(user=user, recipe=recipe).exists()
+        verbose_name_plural = model._meta.verbose_name_plural.lower()
         if request.method == 'POST':
-
+            if relation_exists:
+                return Response({'errors': f'Рецепт уже добавлен в {verbose_name_plural}'}, status=status.HTTP_400_BAD_REQUEST)
             model.objects.create(user=user, recipe=recipe)
-            response_serializer = RecipeShortSerializer(
-                recipe, context={'request': request}
-            )
-            return Response(response_serializer.data,
-                            status=status.HTTP_201_CREATED)
-
-        elif request.method == 'DELETE':
-
-            relation_instance = get_object_or_404(
-                model, user=user, recipe=recipe
-            )
-            relation_instance.delete()
-
+            response_serializer = RecipeShortSerializer(recipe, context={'request': request})
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        if request.method == 'DELETE':
+            if not relation_exists:
+                return Response({'errors': f'Этого рецепта нет в {verbose_name_plural}'}, status=status.HTTP_400_BAD_REQUEST)
+            model.objects.filter(user=user, recipe=recipe).delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
-
         return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
     @action(
@@ -263,13 +190,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         permission_classes=[permissions.IsAuthenticated]
     )
     def download_shopping_cart(self, request):
-        """
-        Генерирует и возвращает текстовый файл со списком покупок
-        для рецептов в корзине пользователя.
-        """
-
         user = request.user
-
         ingredients = RecipeIngredient.objects.filter(
             recipe__shopping_cart__user=user
         ).values(
@@ -278,15 +199,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         ).annotate(
             total_amount=Sum('amount')
         ).order_by('ingredient__name')
-
         content = generate_shopping_list_content(ingredients)
-
-        response = HttpResponse(
-            content,
-            content_type='text/plain; charset=utf-8'
-        )
-        response['Content-Disposition'] = (
-            'attachment; filename="shopping_list.txt"'
-        )
-
+        response = HttpResponse(content, content_type='text/plain; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="shopping_list.txt"'
         return response

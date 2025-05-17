@@ -71,22 +71,22 @@ class RecipeAdmin(BaseAdminSettings):
 
 
 @admin.register(Favorite)
-class FavoriteAdmin(BaseAdminSettings):
+class FavoriteAdmin(admin.ModelAdmin):
     """Админ-панель для модели Favorite"""
 
-    list_display = ('id', 'user', 'recipe', 'added_date')
+    list_display = ('id', 'user', 'recipe')
     search_fields = ('user__username', 'recipe__name')
     list_filter = ('user', 'recipe')
-    ordering = ('-added_date',)
+    ordering = ('id',)
     autocomplete_fields = ('user', 'recipe')
 
 
 @admin.register(ShoppingCart)
-class ShoppingCartAdmin(BaseAdminSettings):
+class ShoppingCartAdmin(admin.ModelAdmin):
     """Админ-панель для модели ShoppingCart"""
 
-    list_display = ('id', 'user', 'recipe', 'added_date')
+    list_display = ('id', 'user', 'recipe')
     search_fields = ('user__username', 'recipe__name')
     list_filter = ('user', 'recipe')
-    ordering = ('-added_date',)
+    ordering = ('id',)
     autocomplete_fields = ('user', 'recipe')

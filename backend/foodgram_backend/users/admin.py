@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.utils.safestring import mark_safe
 
 
 User = get_user_model()
@@ -13,17 +14,23 @@ class UserAdmin(BaseUserAdmin):
     """
 
     list_display = (
+        'id',
         'username',
+        'full_name',
         'email',
-        'first_name',
-        'last_name',
+        'avatar_tag',
+        'recipes_count',
+        'subscriptions_count',
+        'followers_count',
         'is_staff',
         'is_active',
     )
 
     search_fields = ('username', 'email')
 
-    list_filter = ('is_staff', 'is_superuser', 'is_active', 'groups')
+    list_filter = (
+        'is_staff', 'is_superuser', 'is_active', 'groups',
+    )
 
     ordering = ('username',)
 
@@ -48,3 +55,25 @@ class UserAdmin(BaseUserAdmin):
                        'user_permissions'),
         }),
     )
+
+    @admin.display(description='ФИО')
+    def full_name(self, obj):
+        return f'{obj.first_name} {obj.last_name}'
+
+    @admin.display(description='Аватар')
+    def avatar_tag(self, obj):
+        if obj.avatar:
+            return mark_safe(f'<img src="{obj.avatar.url}" width="40" height="40" style="object-fit:cover; border-radius:50%;" />')
+        return '-'
+
+    @admin.display(description='Рецептов')
+    def recipes_count(self, obj):
+        return obj.recipes.count()
+
+    @admin.display(description='Подписок')
+    def subscriptions_count(self, obj):
+        return obj.subscriptions.count() if hasattr(obj, 'subscriptions') else 0
+
+    @admin.display(description='Подписчиков')
+    def followers_count(self, obj):
+        return obj.subscribers.count() if hasattr(obj, 'subscribers') else 0

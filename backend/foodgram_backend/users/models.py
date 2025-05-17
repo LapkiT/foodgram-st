@@ -1,7 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.validators import UnicodeUsernameValidator
-from django.utils.translation import gettext_lazy as _
 
 from constants import (
     USER_EMAIL_MAX_LENGTH,
@@ -32,7 +31,7 @@ class User(AbstractUser):
 
     # Переопределение username
     username = models.CharField(
-        verbose_name='Имя пользователя',
+        verbose_name='Никнейм',
         max_length=USER_USERNAME_MAX_LENGTH,
         unique=True,
         help_text=(
@@ -89,18 +88,18 @@ class User(AbstractUser):
 
 
 class Subscription(models.Model):
-    """Подель подписки одного пользователя на другого (автора)."""
+    """Подписка одного пользователя на другого (автора)."""
 
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='following',
+        related_name='subscriptions',
         verbose_name='Подписчик'
     )
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='follower',
+        related_name='subscribers',
         verbose_name='Автор'
     )
     created_date = models.DateTimeField(

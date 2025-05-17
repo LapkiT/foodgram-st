@@ -29,6 +29,6 @@ router_v1.register(
 )
 
 urlpatterns = [
+    path('auth/', include('djoser.urls.authtoken')),
     path('', include(router_v1.urls)),
-
 ]

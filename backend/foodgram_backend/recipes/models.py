@@ -158,14 +158,9 @@ class UserRecipeRelationBase(models.Model):
         on_delete=models.CASCADE,
         verbose_name='Рецепт'
     )
-    added_date = models.DateTimeField(
-        verbose_name='Дата добавления',
-        auto_now_add=True
-    )
 
     class Meta:
         abstract = True
-        ordering = ['-added_date']
         constraints = [
             models.UniqueConstraint(
                 fields=['user', 'recipe'],
