@@ -36,7 +36,7 @@
 1. **Получение кода**:
 
    ```bash
-   git clone <ваш-репозиторий>
+   git clone https://github.com/LapkiT/foodgram-st.git
    cd foodgram-st
    ```
 
@@ -87,9 +87,9 @@
 
 После запуска проект будет доступен:
 
-- **Главная страница**: http://localhost/
-- **Панель администратора**: http://localhost/admin/
-- **Документация API**: http://localhost/api/docs/
+- [Главная страница](http://localhost/)
+- [Панель администратора](http://localhost/admin/)
+- [Документация API](http://localhost/api/docs/)
 
 ## Дополнительно
 
@@ -150,3 +150,5 @@ docker-compose up -d --build
 - `POSTGRES_PASSWORD` - пароль пользователя базы данных
 
 Подробную информацию о настройке CI/CD можно найти в [инструкции по настройке](./.github/README.md).
+
+[Гаджибеков Тимур Мараточив - телеграмм](t.me/tgadzhibekov)

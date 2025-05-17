@@ -12,6 +12,7 @@ from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
 
 from djoser.views import UserViewSet as DjoserUserViewSet
+from djoser.permissions import CurrentUserOrAdminOrReadOnly
 
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -22,7 +23,7 @@ from recipes.models import (
     ShoppingCart,
     RecipeIngredient
 )
-from subscriptions.models import Subscription
+from users.models import Subscription
 
 from .serializers import (
     RecipeShortSerializer,
@@ -37,9 +38,7 @@ from .serializers import (
 )
 from .permissions import IsAuthorOrReadOnly
 from .filters import RecipeFilter, IngredientNameSearchFilter
-from .utils import (
-    encode_base62, decode_base62, generate_shopping_list_content
-)
+from .utils import generate_shopping_list_content
 
 
 User = get_user_model()
@@ -48,21 +47,24 @@ User = get_user_model()
 class UserViewSet(DjoserUserViewSet):
     """
     ViewSet для модели User. Наследуется от Djoser для сохранения
-    стандартных эндпоинтов. Добавляет действия для управления аватаром.
+    стандартных эндпоинтов. Добавляет действия для управления аватаром
+    и подписками.
     """
 
     serializer_class = UserSerializer
     queryset = User.objects.all()
+    permission_classes = [CurrentUserOrAdminOrReadOnly]
 
     def get_permissions(self):
         """
-        Возвращает IsAuthenticatedOrReadOnly для list и retrieve,
-        а для остальных действий полагается на
-        стандартную логику Djoser/DRF.
+        Возвращает AllowAny для create (регистрация),
+        IsAuthenticatedOrReadOnly для list/retrieve,
+        для остальных действий — стандартная логика Djoser/DRF.
         """
+        if self.action == 'create':
+            return [permissions.AllowAny()]
         if self.action in ['list', 'retrieve']:
             return [permissions.IsAuthenticatedOrReadOnly()]
-
         return super().get_permissions()
 
     @action(
@@ -249,32 +251,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
                 model, user=user, recipe=recipe
             )
             relation_instance.delete()
+
             return Response(status=status.HTTP_204_NO_CONTENT)
+
         return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
-
-    @action(
-        detail=True,
-        methods=['get'],
-        url_path='get-link',
-        permission_classes=[permissions.AllowAny]
-    )
-    def get_short_link(self, request, pk=None):
-        """
-        Возвращает абсолютную короткую ссылку для данного рецепта.
-        Формат: "http://<домен>/s/<base62_id>/"
-        """
-
-        recipe = self.get_object()
-        short_id = encode_base62(recipe.id)
-
-        relative_short_path = f'/s/{short_id}/'
-        absolute_short_link = request.build_absolute_uri(
-            relative_short_path
-        )
-        return Response(
-            {'short-link': absolute_short_link},
-            status=status.HTTP_200_OK
-        )
 
     @action(
         detail=False,
@@ -284,13 +264,14 @@ class RecipeViewSet(viewsets.ModelViewSet):
     )
     def download_shopping_cart(self, request):
         """
-        Формирует и возвращает текстовый файл со списком покупок
-        для текущего пользователя.
+        Генерирует и возвращает текстовый файл со списком покупок
+        для рецептов в корзине пользователя.
         """
+
         user = request.user
 
-        ingredients_summary = RecipeIngredient.objects.filter(
-            recipe__in_shopping_cart__user=user
+        ingredients = RecipeIngredient.objects.filter(
+            recipe__shopping_cart__user=user
         ).values(
             'ingredient__name',
             'ingredient__measurement_unit'
@@ -298,12 +279,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
             total_amount=Sum('amount')
         ).order_by('ingredient__name')
 
-        shopping_list_content = generate_shopping_list_content(
-            ingredients_summary
-        )
+        content = generate_shopping_list_content(ingredients)
 
         response = HttpResponse(
-            shopping_list_content,
+            content,
             content_type='text/plain; charset=utf-8'
         )
         response['Content-Disposition'] = (
@@ -311,30 +290,3 @@ class RecipeViewSet(viewsets.ModelViewSet):
         )
 
         return response
-
-
-class RecipeShortLinkRedirectView(View):
-    """
-    View для обработки коротких ссылок
-    /s/<short_id>/.
-    Декодирует short_id, находит рецепт и редиректит
-    на страницу рецепта.
-    """
-
-    def get(self, request, short_id=None):
-        if short_id is None:
-            raise Http404("Короткий идентификатор не предоставлен.")
-        try:
-            recipe_id = decode_base62(short_id)
-        except ValueError:
-            raise Http404("Некорректная короткая ссылка.")
-
-        recipe = get_object_or_404(Recipe, pk=recipe_id)
-
-        frontend_recipe_path = f"/recipes/{recipe.id}/"
-
-        absolute_frontend_url = request.build_absolute_uri(
-            frontend_recipe_path
-        )
-
-        return redirect(absolute_frontend_url)

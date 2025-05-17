@@ -22,6 +22,7 @@ class Command(BaseCommand):
     )
 
     FIXTURES_DIR = Path('/app/fixtures')
+    BATCH_SIZE = 1000  # Размер пакета для bulk_create
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -127,6 +128,13 @@ class Command(BaseCommand):
                 )
 
         self.stdout.write(f"Найдено {len(data)} записей в JSON.")
+        
+        # Подготовка данных для bulk_create
+        ingredients_to_create = []
+        existing_ingredients = set(
+            Ingredient.objects.values_list('name', flat=True)
+        )
+
         for item in data:
             if not isinstance(item, dict):
                 self.stdout.write(self.style.WARNING(
@@ -142,16 +150,37 @@ class Command(BaseCommand):
                 skipped_count += 1
                 continue
 
-            created, error = self._save_ingredient(name, unit)
-            if error:
-                error_count += 1
-                self.stdout.write(self.style.ERROR(
-                    f"Ошибка сохранения JSON элемента {item}: {error}"
-                ))
-            elif created:
-                created_count += 1
+            name = name.lower()
+            if name not in existing_ingredients:
+                ingredients_to_create.append(
+                    Ingredient(name=name, measurement_unit=unit)
+                )
+                existing_ingredients.add(name)
             else:
                 skipped_count += 1
+
+            # Выполняем bulk_create при достижении размера пакета
+            if len(ingredients_to_create) >= self.BATCH_SIZE:
+                try:
+                    Ingredient.objects.bulk_create(ingredients_to_create)
+                    created_count += len(ingredients_to_create)
+                    ingredients_to_create = []
+                except Exception as e:
+                    error_count += len(ingredients_to_create)
+                    self.stdout.write(self.style.ERROR(
+                        f"Ошибка при пакетном создании: {e}"
+                    ))
+
+        # Создаем оставшиеся ингредиенты
+        if ingredients_to_create:
+            try:
+                Ingredient.objects.bulk_create(ingredients_to_create)
+                created_count += len(ingredients_to_create)
+            except Exception as e:
+                error_count += len(ingredients_to_create)
+                self.stdout.write(self.style.ERROR(
+                    f"Ошибка при пакетном создании: {e}"
+                ))
 
         return created_count, skipped_count, error_count
 
@@ -173,10 +202,11 @@ class Command(BaseCommand):
                     "'name' и 'measurement_unit'."
                 )
 
-            try:
-                pass
-            except Exception:
-                pass
+            # Подготовка данных для bulk_create
+            ingredients_to_create = []
+            existing_ingredients = set(
+                Ingredient.objects.values_list('name', flat=True)
+            )
 
             for row_num, row in enumerate(reader, start=2):
                 name = row.get('name')
@@ -186,16 +216,37 @@ class Command(BaseCommand):
                     skipped_count += 1
                     continue
 
-                created, error = self._save_ingredient(name, unit)
-                if error:
-                    error_count += 1
-                    self.stdout.write(self.style.ERROR(
-                        "Ошибка сохранения строки CSV"
-                    ))
-                elif created:
-                    created_count += 1
+                name = name.lower()
+                if name not in existing_ingredients:
+                    ingredients_to_create.append(
+                        Ingredient(name=name, measurement_unit=unit)
+                    )
+                    existing_ingredients.add(name)
                 else:
                     skipped_count += 1
+
+                # Выполняем bulk_create при достижении размера пакета
+                if len(ingredients_to_create) >= self.BATCH_SIZE:
+                    try:
+                        Ingredient.objects.bulk_create(ingredients_to_create)
+                        created_count += len(ingredients_to_create)
+                        ingredients_to_create = []
+                    except Exception as e:
+                        error_count += len(ingredients_to_create)
+                        self.stdout.write(self.style.ERROR(
+                            f"Ошибка при пакетном создании: {e}"
+                        ))
+
+            # Создаем оставшиеся ингредиенты
+            if ingredients_to_create:
+                try:
+                    Ingredient.objects.bulk_create(ingredients_to_create)
+                    created_count += len(ingredients_to_create)
+                except Exception as e:
+                    error_count += len(ingredients_to_create)
+                    self.stdout.write(self.style.ERROR(
+                        f"Ошибка при пакетном создании: {e}"
+                    ))
 
         return created_count, skipped_count, error_count
 
@@ -215,26 +266,6 @@ class Command(BaseCommand):
             ))
             return False
         return True
-
-    def _save_ingredient(self, name, unit):
-        """
-        Сохраняет или обновляет ингредиент.
-        Возвращает (bool: created, str: error_message or None).
-        """
-        try:
-            obj, created = Ingredient.objects.get_or_create(
-                name=name.lower(),
-                defaults={'measurement_unit': unit}
-            )
-            if not created and obj.measurement_unit != unit:
-                obj.measurement_unit = unit
-                obj.save()
-                self.stdout.write(self.style.NOTICE(
-                    f"Обновлена единица измерения для '{name.lower()}'"
-                ))
-            return created, None
-        except Exception as e:
-            return False, str(e)
 
     def _write_summary(self, filename, created, skipped, errors):
         """Выводит итоговую статистику."""

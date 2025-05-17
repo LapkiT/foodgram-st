@@ -3,7 +3,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
-from api.views import RecipeShortLinkRedirectView
+from recipes.views import RecipeShortLinkView
 
 
 urlpatterns = [
@@ -11,12 +11,15 @@ urlpatterns = [
 
     path(
         's/<str:short_id>/',
-        RecipeShortLinkRedirectView.as_view(),
+        RecipeShortLinkView.as_view(),
         name='short_link_redirect'
     ),
 
+    # Djoser endpoints
     path('api/auth/', include('djoser.urls.authtoken')),
+    path('api/users/', include('djoser.urls')),
     path('api/', include('api.urls')),
+    path('', include('recipes.urls')),
 
 ]
 

@@ -3,6 +3,7 @@ from django.db import transaction
 from rest_framework import serializers
 from rest_framework.fields import CurrentUserDefault
 from drf_extra_fields.fields import Base64ImageField
+from djoser.serializers import UserSerializer as DjoserUserSerializer
 
 from constants import (
     RECIPES_LIMIT_IN_SUBSCRIPTION_DEFAULT,
@@ -18,33 +19,23 @@ from recipes.models import (
     ShoppingCart
 )
 
-from subscriptions.models import Subscription
+from users.models import Subscription
 
 
 User = get_user_model()
 
 
-class UserSerializer(serializers.ModelSerializer):
+class UserSerializer(DjoserUserSerializer):
     """
     Сериализатор для отображения данных пользователей.
-    Включает поле is_subscribed для проверки
-    подписки текущего пользователя.
+    Наследуется от DjoserUserSerializer и добавляет поле is_subscribed
+    для проверки подписки текущего пользователя.
     """
 
     is_subscribed = serializers.SerializerMethodField(read_only=True)
 
-    class Meta():
-        model = User
-
-        fields = (
-            'id',
-            'email',
-            'username',
-            'first_name',
-            'last_name',
-            'avatar',
-            'is_subscribed'
-        )
+    class Meta(DjoserUserSerializer.Meta):
+        fields = DjoserUserSerializer.Meta.fields + ('is_subscribed',)
 
     def get_is_subscribed(self, obj):
         """

@@ -31,9 +31,7 @@ INSTALLED_APPS = [
 
     'users.apps.UsersConfig',
     'api.apps.ApiConfig',
-    'subscriptions.apps.SubscriptionsConfig',
     'recipes.apps.RecipesConfig',
-
 ]
 
 MIDDLEWARE = [
@@ -121,17 +119,24 @@ DJOSER = {
     'USER_CREATE_PASSWORD_RETYPE': False,
     'PASSWORD_RESET_CONFIRM_URL': 'password/reset/confirm/{uid}/{token}',
     'SET_PASSWORD_RETYPE': False,
-
-    'PERMISSIONS': {
-        'user': ['rest_framework.permissions.IsAuthenticated'],
-        'user_list': ['rest_framework.permissions.AllowAny'],
-    },
+    'PASSWORD_RESET_CONFIRM_RETYPE': False,
+    'PASSWORD_CHANGED_EMAIL_CONFIRMATION': False,
+    'PASSWORD_RESET_SHOW_EMAIL_NOT_FOUND': True,
+    'TOKEN_MODEL': 'rest_framework.authtoken.models.Token',
     'SERIALIZERS': {
         'user': 'api.serializers.UserSerializer',
         'current_user': 'api.serializers.UserSerializer',
+        'user_create': 'api.serializers.UserSerializer',
+        'user_delete': 'djoser.serializers.UserDeleteSerializer',
     },
-
-    'TOKEN_MODEL': 'rest_framework.authtoken.models.Token',
+    'PERMISSIONS': {
+        'user': ['rest_framework.permissions.IsAuthenticated'],
+        'user_list': ['rest_framework.permissions.AllowAny'],
+        'user_create': ['rest_framework.permissions.AllowAny'],
+        'user_delete': ['rest_framework.permissions.IsAuthenticated'],
+        'set_password': ['rest_framework.permissions.IsAuthenticated'],
+    },
+    'HIDE_USERS': False,
 }
 
 
