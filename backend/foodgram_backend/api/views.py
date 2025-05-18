@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, FileResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.db.models import Sum
 from django.views import View
@@ -68,11 +68,9 @@ class UserViewSet(DjoserUserViewSet):
             serializer.save()
             response_serializer = AvatarSerializer(user, context={'request': request})
             return Response(response_serializer.data, status=status.HTTP_200_OK)
-        if request.method == 'DELETE':
-            if user.avatar:
-                user.avatar.delete(save=True)
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        if user.avatar:
+            user.avatar.delete(save=True)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
         detail=True,
@@ -91,13 +89,8 @@ class UserViewSet(DjoserUserViewSet):
             Subscription.objects.create(user=current_user, author=request_author)
             response_serializer = AuthorWithRecipesSerializer(request_author, context={'request': request})
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
-        if request.method == 'DELETE':
-            subscription_instance = Subscription.objects.filter(user=current_user, author=request_author).first()
-            if not subscription_instance:
-                return Response({'errors': 'Вы не были подписаны на этого пользователя'}, status=status.HTTP_400_BAD_REQUEST)
-            subscription_instance.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        get_object_or_404(Subscription, user=current_user, author=request_author).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
         detail=False,
@@ -164,10 +157,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
     def _manage_user_recipe_relation(self, request, pk, model):
         user = request.user
-        try:
-            recipe = Recipe.objects.get(pk=pk)
-        except Recipe.DoesNotExist:
-            return Response({'errors': 'Рецепт с таким ID не найден.'}, status=status.HTTP_404_NOT_FOUND)
+        recipe = get_object_or_404(Recipe, pk=pk)
         relation_exists = model.objects.filter(user=user, recipe=recipe).exists()
         verbose_name_plural = model._meta.verbose_name_plural.lower()
         if request.method == 'POST':
@@ -176,12 +166,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
             model.objects.create(user=user, recipe=recipe)
             response_serializer = RecipeShortSerializer(recipe, context={'request': request})
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
-        if request.method == 'DELETE':
-            if not relation_exists:
-                return Response({'errors': f'Этого рецепта нет в {verbose_name_plural}'}, status=status.HTTP_400_BAD_REQUEST)
-            model.objects.filter(user=user, recipe=recipe).delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        if not relation_exists:
+            return Response({'errors': f'Рецепта с таким ID нет в {verbose_name_plural}'}, status=status.HTTP_400_BAD_REQUEST)
+        model.objects.filter(user=user, recipe=recipe).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
         detail=False,
@@ -200,6 +188,6 @@ class RecipeViewSet(viewsets.ModelViewSet):
             total_amount=Sum('amount')
         ).order_by('ingredient__name')
         content = generate_shopping_list_content(ingredients)
-        response = HttpResponse(content, content_type='text/plain; charset=utf-8')
+        response = FileResponse(content, content_type='text/plain; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="shopping_list.txt"'
         return response

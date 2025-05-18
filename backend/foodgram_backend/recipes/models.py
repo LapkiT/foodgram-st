@@ -3,9 +3,6 @@ from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator
 
 from constants import (
-    RECIPE_NAME_MAX_LENGTH,
-    INGREDIENT_NAME_MAX_LENGTH,
-    INGREDIENT_UNIT_MAX_LENGTH,
     MIN_AMOUNT_VALUE,
     MIN_COOKING_TIME_VALUE
 )
@@ -19,13 +16,13 @@ class Ingredient(models.Model):
 
     name = models.CharField(
         verbose_name='Название ингредиента',
-        max_length=INGREDIENT_NAME_MAX_LENGTH,
+        max_length=200,
         db_index=True,
     )
 
     measurement_unit = models.CharField(
         verbose_name='Единица измерения',
-        max_length=INGREDIENT_UNIT_MAX_LENGTH,
+        max_length=50,
     )
 
     class Meta:
@@ -55,7 +52,7 @@ class Recipe(models.Model):
 
     name = models.CharField(
         verbose_name='Название рецепта',
-        max_length=RECIPE_NAME_MAX_LENGTH,
+        max_length=200,
         db_index=True
     )
 
@@ -80,8 +77,7 @@ class Recipe(models.Model):
     cooking_time = models.PositiveSmallIntegerField(
         verbose_name='Время приготовления (в минутах)',
         validators=[MinValueValidator(
-            MIN_COOKING_TIME_VALUE,
-            'Время должно быть не меньше 1 минуты'
+            MIN_COOKING_TIME_VALUE
         )],
         help_text='Укажите время приготовления в минутах'
     )
@@ -123,8 +119,7 @@ class RecipeIngredient(models.Model):
     amount = models.PositiveSmallIntegerField(
         verbose_name='Количество',
         validators=[MinValueValidator(
-            MIN_AMOUNT_VALUE,
-            'Количество должно быть не меньше 1'
+            MIN_AMOUNT_VALUE
         )],
         help_text='Укажите количество ингредиента'
     )
@@ -176,7 +171,7 @@ class Favorite(UserRecipeRelationBase):
     """Модель для избранных рецептов пользователя"""
 
     class Meta(UserRecipeRelationBase.Meta):
-        default_related_name = 'favorited_by'
+        default_related_name = 'favorited_by_set'
         verbose_name = 'Избранный рецепт'
         verbose_name_plural = 'Избранные рецепты'
 
@@ -185,6 +180,6 @@ class ShoppingCart(UserRecipeRelationBase):
     """Модель для рецептов в списке покупок пользователя"""
 
     class Meta(UserRecipeRelationBase.Meta):
-        default_related_name = 'in_shopping_cart'
+        default_related_name = 'in_shopping_cart_set'
         verbose_name = 'Рецепт в списке покупок'
         verbose_name_plural = 'Рецепты в списке покупок'

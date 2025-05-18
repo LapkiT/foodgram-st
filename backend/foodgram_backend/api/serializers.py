@@ -7,7 +7,6 @@ from djoser.serializers import UserSerializer as DjoserUserSerializer, UserCreat
 import logging
 
 from constants import (
-    RECIPES_LIMIT_IN_SUBSCRIPTION_DEFAULT,
     MIN_COOKING_TIME_VALUE,
     MIN_AMOUNT_VALUE
 )
@@ -41,11 +40,12 @@ class UserSerializer(DjoserUserSerializer):
 
     def get_is_subscribed(self, obj):
         request = self.context.get('request')
-        if request is None or not request.user.is_authenticated:
-            return False
-        if request.user == obj:
-            return False
-        return obj.subscribers.filter(user=request.user).exists()
+        return (
+            request is not None
+            and request.user.is_authenticated
+            and request.user != obj
+            and obj.subscribers.filter(user=request.user).exists()
+        )
 
 
 class AvatarSerializer(serializers.ModelSerializer):
@@ -102,14 +102,14 @@ class RecipeReadSerializer(serializers.ModelSerializer):
 
 class IngredientAmountWriteSerializer(serializers.Serializer):
     id = serializers.PrimaryKeyRelatedField(queryset=Ingredient.objects.all())
-    amount = serializers.IntegerField(min_value=MIN_AMOUNT_VALUE, error_messages={'min_value': 'Количество должно быть не меньше 1'})
+    amount = serializers.IntegerField(min_value=MIN_AMOUNT_VALUE)
 
 
 class RecipeWriteSerializer(serializers.ModelSerializer):
     ingredients = IngredientAmountWriteSerializer(many=True, required=True)
     image = Base64ImageField(required=True, allow_null=False)
     author = serializers.HiddenField(default=CurrentUserDefault())
-    cooking_time = serializers.IntegerField(min_value=MIN_COOKING_TIME_VALUE, error_messages={'min_value': 'Время приготовления должно быть не меньше 1 минуты.'})
+    cooking_time = serializers.IntegerField(min_value=MIN_COOKING_TIME_VALUE)
     class Meta:
         model = Recipe
         fields = ('id', 'author', 'ingredients', 'name', 'image', 'text', 'cooking_time')
@@ -135,9 +135,8 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         ingredients_data = validated_data.pop('ingredients', None)
         recipe = super().update(instance, validated_data)
-        if ingredients_data is not None:
-            recipe.recipe_ingredients.all().delete()
-            self._create_ingredients(recipe, ingredients_data)
+        recipe.recipe_ingredients.all().delete()
+        self._create_ingredients(recipe, ingredients_data)
         return recipe
     def validate(self, data):
         instance = getattr(self, 'instance', None)
@@ -168,7 +167,7 @@ class AuthorWithRecipesSerializer(UserSerializer):
         read_only_fields = fields
     def get_recipes(self, obj):
         request = self.context.get('request')
-        default_limit = RECIPES_LIMIT_IN_SUBSCRIPTION_DEFAULT
+        default_limit = 3
         limit_str = request.query_params.get('recipes_limit', default_limit)
         try:
             limit = int(limit_str)
@@ -179,13 +178,3 @@ class AuthorWithRecipesSerializer(UserSerializer):
         recipes_queryset = obj.recipes.all()[:limit]
         serializer = RecipeShortSerializer(recipes_queryset, many=True, context=self.context)
         return serializer.data
-
-
-class UserCreateSerializer(DjoserUserCreateSerializer):
-    """
-    Сериализатор для создания пользователей.
-    Наследуется от DjoserUserCreateSerializer для сохранения базовой функциональности.
-    """
-    class Meta(DjoserUserCreateSerializer.Meta):
-        model = User
-        fields = ('email', 'username', 'first_name', 'last_name', 'password')

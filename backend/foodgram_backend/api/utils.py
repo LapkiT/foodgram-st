@@ -1,26 +1,35 @@
 import string
+from datetime import datetime
 
 
 BASE62_ALPHABET = string.digits + string.ascii_letters
 BASE = len(BASE62_ALPHABET)
 
 
-def generate_shopping_list_content(ingredients_queryset):
+def generate_shopping_list_content(ingredients_queryset, recipes_info=None):
     """
     Генерирует текстовое содержимое для файла списка покупок.
-    Принимает queryset с агрегированными данными ингредиентов.
-    Queryset должен содержать словари с ключами:
-    'ingredient__name', 'ingredient__measurement_unit', 'total_amount'.
+    ingredients_queryset — агрегированные данные ингредиентов.
+    recipes_info — dict: имя_ингредиента -> set((название_рецепта, автор))
     """
-    shopping_list_parts = ['Список покупок:\n']
+    date_str = datetime.now().strftime('%d.%m.%Y %H:%M')
+    header = f'Список покупок\nДата составления: {date_str}\n'
     if not ingredients_queryset:
-        shopping_list_parts.append('Ваш список пуст.')
-        return "".join(shopping_list_parts)
-    for item in ingredients_queryset:
-        name = item.get('ingredient__name', 'Без названия')
-        unit = item.get('ingredient__measurement_unit', 'шт.')
-        total_amount = item.get('total_amount', 0)
-        shopping_list_parts.append(
-            f'\n- {name} ({unit}) — {total_amount}'
-        )
-    return "".join(shopping_list_parts)
+        return f'{header}Ваш список пуст.'
+    products = []
+    for idx, item in enumerate(ingredients_queryset, 1):
+        name = item['ingredient__name'].capitalize()
+        unit = item['ingredient__measurement_unit']
+        total_amount = item['total_amount']
+        products.append(f"{idx}. {name} ({unit}) — {total_amount}")
+    result_parts = [header, 'Товары:', *products]
+    if recipes_info:
+        recipes_section = ['\nРецепты, для которых нужны эти продукты:']
+        for idx, item in enumerate(ingredients_queryset, 1):
+            name = item['ingredient__name']
+            recs = recipes_info.get(name)
+            if recs:
+                recipes_list = ', '.join([f'"{r}" (автор: {a})' for r, a in recs])
+                recipes_section.append(f"{idx}. {name.capitalize()}: {recipes_list}")
+        result_parts.extend(recipes_section)
+    return '\n'.join(result_parts)

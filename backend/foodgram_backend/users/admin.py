@@ -72,8 +72,8 @@ class UserAdmin(BaseUserAdmin):
 
     @admin.display(description='Подписок')
     def subscriptions_count(self, obj):
-        return obj.subscriptions.count() if hasattr(obj, 'subscriptions') else 0
+        return obj.subscriptions.count()
 
     @admin.display(description='Подписчиков')
     def followers_count(self, obj):
-        return obj.subscribers.count() if hasattr(obj, 'subscribers') else 0
+        return obj.subscribers.count()

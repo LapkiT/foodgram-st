@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.utils.html import format_html
+from django.utils.html import format_html, mark_safe
 
 from .models import (
     Ingredient, Recipe, RecipeIngredient, Favorite, ShoppingCart
@@ -17,9 +17,13 @@ class BaseAdminSettings(admin.ModelAdmin):
 class IngredientAdmin(BaseAdminSettings):
     """Админ-панель для модели Ingredient"""
 
-    list_display = ('name', 'measurement_unit')
-    search_fields = ('name',)
+    list_display = ('name', 'measurement_unit', 'recipes_count')
+    search_fields = ('name', 'measurement_unit')
     list_filter = ('measurement_unit',)
+
+    @admin.display(description='Число рецептов')
+    def recipes_count(self, obj):
+        return obj.recipes.count()
 
 
 class RecipeIngredientInline(admin.TabularInline):
@@ -44,7 +48,7 @@ class RecipeAdmin(BaseAdminSettings):
     """Админ-панель для модели Recipe"""
 
     list_display = (
-        'id', 'name', 'author', 'get_image_preview', 'favorited_count'
+        'id', 'name', 'cooking_time', 'author', 'favorited_count', 'get_products', 'get_image_preview'
     )
 
     readonly_fields = ('get_image_preview', 'favorited_count')
@@ -54,20 +58,25 @@ class RecipeAdmin(BaseAdminSettings):
 
     ordering = ('-pub_date',)
 
+    @admin.display(description='Первью изображения')
     def get_image_preview(self, obj):
         if obj.image:
             return format_html(
-                '<img src="{}" with="80" height="50" />', obj.image.url
+                '<img src="{}" width="80" height="50" />', obj.image.url
             )
         return "Нет изображения"
 
-    get_image_preview.short_description = 'Первью изображения'
-
+    @admin.display(description='В избранном (раз)', ordering='favorited_by__count')
     def favorited_count(self, obj):
         return obj.favorited_by.count()
 
-    favorited_count.short_description = 'В избранном (раз)'
-    favorited_count.admin_order_field = 'favorited_by__count'
+    @admin.display(description='Продукты')
+    def get_products(self, obj):
+        items = obj.recipe_ingredients.select_related('ingredient').all()
+        html = '<ul>' + ''.join(
+            f'<li>{ri.ingredient.name} — {ri.amount} {ri.ingredient.measurement_unit}</li>' for ri in items
+        ) + '</ul>'
+        return mark_safe(html)
 
 
 @admin.register(Favorite)
